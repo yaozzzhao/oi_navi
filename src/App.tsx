@@ -345,6 +345,19 @@ function App() {
               onChange={(event) => setFilteredText(event.target.value)}
             />
           </label>
+          <div className="actions">
+            <button
+              className="btn"
+              onClick={() => {
+                setYear('')
+                setContest('')
+                setLevel('')
+                setFilteredText('')
+              }}
+            >
+              重置
+            </button>
+          </div>
         </div>
       </section>
 

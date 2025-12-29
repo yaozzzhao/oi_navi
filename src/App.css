@@ -190,6 +190,11 @@ input[type='text']:focus {
   grid-column: span 2;
 }
 
+.actions {
+  display: flex;
+  align-items: flex-end;
+}
+
 .list {
   margin-top: 18px;
 }
