@@ -24,7 +24,7 @@ const API_ROOT = 'https://api.github.com'
 const FALLBACK_BRANCH = 'main'
 
 function getExtension(path: string) {
-  return path.split('.').pop()?.toLowerCase()
+  return path.split('.').pop()?.toLowerCase() ?? ''
 }
 
 const SAMPLE_ENTRIES: ProblemEntry[] = [
@@ -44,7 +44,6 @@ const SAMPLE_ENTRIES: ProblemEntry[] = [
     contest: 'NOI',
     year: '2024',
     level: '总览',
-    round: '样例',
     segments: ['NOI', '2024'],
   },
 ]
