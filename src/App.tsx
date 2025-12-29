@@ -23,6 +23,10 @@ const REPO = 'oi'
 const API_ROOT = 'https://api.github.com'
 const FALLBACK_BRANCH = 'main'
 
+function getExtension(path: string) {
+  return path.split('.').pop()?.toLowerCase()
+}
+
 const SAMPLE_ENTRIES: ProblemEntry[] = [
   {
     id: 'sample-readme',
@@ -62,14 +66,14 @@ function buildGithubUrl(path: string, branch: string) {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-  if (path.toLowerCase().endsWith('.pdf')) {
+  if (getExtension(path) === 'pdf') {
     return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${encodedPath}`
   }
   return `https://github.com/${OWNER}/${REPO}/blob/${branch}/${encodedPath}`
 }
 
 function isPreviewable(path: string) {
-  const ext = path.split('.').pop()?.toLowerCase()
+  const ext = getExtension(path)
   return ext ? ['pdf', 'txt', 'html', 'htm'].includes(ext) : false
 }
 
