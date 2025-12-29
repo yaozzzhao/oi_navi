@@ -181,40 +181,95 @@ function App() {
   const [statusNote, setStatusNote] = useState('正在从 GitHub 拉取数据...')
   const [branch, setBranch] = useState(FALLBACK_BRANCH)
   const [updatedAt, setUpdatedAt] = useState<string | undefined>(undefined)
+  const [fromCache, setFromCache] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
+  const CACHE_KEY = 'oi_navi_data_v1'
+  const CACHE_DURATION = 1000 * 60 * 60 * 24 // 24 hours
+
+  const loadData = async (forceUpdate = false) => {
     const controller = new AbortController()
-
-    const load = async () => {
+    // Try loading from cache first
+    if (!forceUpdate) {
       try {
-        const repoInfo = await fetchDefaultBranch(controller.signal)
-        if (cancelled) return
-        const branchName = repoInfo.default_branch ?? FALLBACK_BRANCH
-        setBranch(branchName)
-        setUpdatedAt(repoInfo.pushed_at)
-        setStatusNote('正在加载仓库树...')
-
-        const repoEntries = await fetchRepoEntries(branchName, controller.signal)
-        if (cancelled) return
-        setEntries(repoEntries)
-        setStatus('ready')
-        setStatusNote(`从 ${branchName} 分支加载了 ${repoEntries.length} 条记录`)
-      } catch (error) {
-        console.error(error)
-        if (cancelled) return
-        setEntries(SAMPLE_ENTRIES)
-        setStatus('error')
-        setStatusNote('实时数据获取失败，已加载示例数据。请检查网络或稍后重试。')
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+          const { timestamp, data, branch: cachedBranch, updatedAt: cachedUpdatedAt } = JSON.parse(cached)
+          if (Date.now() - timestamp < CACHE_DURATION) {
+            setEntries(data)
+            setBranch(cachedBranch)
+            setUpdatedAt(cachedUpdatedAt)
+            setStatus('ready')
+            setStatusNote(`已加载缓存数据 (${new Date(timestamp).toLocaleString('zh-CN')})`)
+            setFromCache(true)
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load cache', e)
       }
     }
 
-    load()
-    return () => {
-      cancelled = true
-      controller.abort()
+    setStatus('loading')
+    setStatusNote('正在连接 GitHub API...')
+    setFromCache(false)
+
+    try {
+      const repoInfo = await fetchDefaultBranch(controller.signal)
+      const branchName = repoInfo.default_branch ?? FALLBACK_BRANCH
+      setBranch(branchName)
+      setUpdatedAt(repoInfo.pushed_at)
+      setStatusNote('正在下载仓库文件列表...')
+
+      const repoEntries = await fetchRepoEntries(branchName, controller.signal)
+      
+      setEntries(repoEntries)
+      setStatus('ready')
+      setStatusNote(`数据已更新 (共 ${repoEntries.length} 条)`)
+
+      // Save to cache
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          timestamp: Date.now(),
+          data: repoEntries,
+          branch: branchName,
+          updatedAt: repoInfo.pushed_at
+        }))
+      } catch (e) {
+        console.warn('Failed to save cache', e)
+      }
+
+    } catch (error) {
+      console.error(error)
+      
+      // If fetch fails but we have stale cache, use it as fallback
+      const cached = localStorage.getItem(CACHE_KEY)
+      if (cached) {
+          const { data, branch: cachedBranch, updatedAt: cachedUpdatedAt, timestamp } = JSON.parse(cached)
+          setEntries(data)
+          setBranch(cachedBranch)
+          setUpdatedAt(cachedUpdatedAt)
+          setStatus('ready')
+          setStatusNote(`网络请求失败，已展示旧缓存数据 (${new Date(timestamp).toLocaleString()})`)
+          setFromCache(true)
+          return
+      }
+
+      setEntries(SAMPLE_ENTRIES)
+      setStatus('error')
+      setStatusNote('数据获取失败。请检查网络连接（可能需科学上网）或稍后重试。')
     }
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
+
+  const handleForceRefresh = () => {
+    if (confirm('确认强制刷新？这将重新请求 GitHub API，可能需要科学上网。')) {
+      loadData(true)
+    }
+  }
+
 
   const searchText = filteredText.trim().toLowerCase()
 
@@ -294,6 +349,11 @@ function App() {
         <div className={`status ${status}`}>
           <span className="dot" />
           <span>{statusNote}</span>
+          {fromCache && (
+            <button className="link-btn" onClick={handleForceRefresh}>
+              强制刷新
+            </button>
+          )}
           {updatedAt && (
             <span className="updated">
               最后更新：{new Date(updatedAt).toLocaleDateString('zh-CN')}
