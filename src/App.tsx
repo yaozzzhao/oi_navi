@@ -17,10 +17,28 @@ type RepoInfo = {
   pushed_at?: string
 }
 
-const OWNER = 'winant'
-const REPO = 'oi'
-const API_ROOT = 'https://gitee.com/api/v5'
-const FALLBACK_BRANCH = 'master'
+type DataSource = 'gitee' | 'github'
+
+const CONFIG = {
+  gitee: {
+    owner: 'winant',
+    repo: 'oi',
+    apiRoot: 'https://gitee.com/api/v5',
+    fallbackBranch: 'master',
+    urlRoot: 'https://gitee.com',
+    label: 'Gitee',
+    desc: '国内访问稳定，数据可能稍旧',
+  },
+  github: {
+    owner: 'winterant',
+    repo: 'oi',
+    apiRoot: 'https://api.github.com',
+    fallbackBranch: 'main',
+    urlRoot: 'https://github.com',
+    label: 'GitHub',
+    desc: '数据最新，需科学上网',
+  },
+}
 
 function getExtension(path: string) {
   return path.split('.').pop()?.toLowerCase() ?? ''
@@ -31,7 +49,7 @@ const SAMPLE_ENTRIES: ProblemEntry[] = [
     id: 'sample-readme',
     name: '仓库 README',
     path: 'README.md',
-    url: `https://gitee.com/${OWNER}/${REPO}`,
+    url: `https://gitee.com/winant/oi`,
     contest: '仓库首页',
     segments: [],
   },
@@ -49,17 +67,26 @@ function buildOptions(values: Array<string | undefined>, sortNumber = false) {
   return unique.sort((a, b) => a.localeCompare(b))
 }
 
-function buildRepoUrl(path: string, branch: string) {
+function buildRepoUrl(path: string, branch: string, source: DataSource) {
+  const conf = CONFIG[source]
   const encodedPath = path
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
   
-  // Gitee raw: https://gitee.com/winant/oi/raw/master/path/to/file.pdf
-  if (getExtension(path) === 'pdf') {
-    return `https://gitee.com/${OWNER}/${REPO}/raw/${branch}/${encodedPath}`
+  if (source === 'gitee') {
+    // Gitee raw: https://gitee.com/winant/oi/raw/master/path/to/file.pdf
+    if (getExtension(path) === 'pdf') {
+      return `${conf.urlRoot}/${conf.owner}/${conf.repo}/raw/${branch}/${encodedPath}`
+    }
+    return `${conf.urlRoot}/${conf.owner}/${conf.repo}/blob/${branch}/${encodedPath}`
+  } else {
+    // GitHub
+    if (getExtension(path) === 'pdf') {
+      return `https://raw.githubusercontent.com/${conf.owner}/${conf.repo}/${branch}/${encodedPath}`
+    }
+    return `${conf.urlRoot}/${conf.owner}/${conf.repo}/blob/${branch}/${encodedPath}`
   }
-  return `https://gitee.com/${OWNER}/${REPO}/blob/${branch}/${encodedPath}`
 }
 
 function isPreviewable(path: string) {
@@ -67,7 +94,7 @@ function isPreviewable(path: string) {
   return ext ? ['pdf', 'txt', 'html', 'htm'].includes(ext) : false
 }
 
-function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
+function mapPathToEntry(path: string, branch: string, source: DataSource): ProblemEntry | null {
   const segments = path.split('/')
   const fileName = segments.at(-1)
   if (!fileName) return null
@@ -103,7 +130,7 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
     id: path,
     name,
     path,
-    url: buildRepoUrl(path, branch),
+    url: buildRepoUrl(path, branch, source),
     contest,
     year,
     level,
@@ -111,8 +138,9 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
   }
 }
 
-async function fetchDefaultBranch(signal?: AbortSignal): Promise<RepoInfo> {
-  const response = await fetch(`${API_ROOT}/repos/${OWNER}/${REPO}`, { signal })
+async function fetchDefaultBranch(source: DataSource, signal?: AbortSignal): Promise<RepoInfo> {
+  const conf = CONFIG[source]
+  const response = await fetch(`${conf.apiRoot}/repos/${conf.owner}/${conf.repo}`, { signal })
   if (!response.ok) {
     throw new Error(`无法获取仓库信息: ${response.status} ${response.statusText}`)
   }
@@ -120,9 +148,10 @@ async function fetchDefaultBranch(signal?: AbortSignal): Promise<RepoInfo> {
   return response.json()
 }
 
-async function fetchRepoEntries(branch: string, signal?: AbortSignal): Promise<ProblemEntry[]> {
+async function fetchRepoEntries(branch: string, source: DataSource, signal?: AbortSignal): Promise<ProblemEntry[]> {
+  const conf = CONFIG[source]
   const response = await fetch(
-    `${API_ROOT}/repos/${OWNER}/${REPO}/git/trees/${branch}?recursive=1`,
+    `${conf.apiRoot}/repos/${conf.owner}/${conf.repo}/git/trees/${branch}?recursive=1`,
     { signal },
   )
 
@@ -135,7 +164,7 @@ async function fetchRepoEntries(branch: string, signal?: AbortSignal): Promise<P
 
   return payload.tree
     .filter((item) => item.type === 'blob')
-    .map((item) => mapPathToEntry(item.path, branch))
+    .map((item) => mapPathToEntry(item.path, branch, source))
     .filter(Boolean) as ProblemEntry[]
 }
 
@@ -164,337 +193,213 @@ function Selector({ label, value, options, onChange, placeholder }: SelectorProp
 }
 
 function App() {
+  const [dataSource, setDataSource] = useState<DataSource>('gitee')
   const [entries, setEntries] = useState<ProblemEntry[]>([])
   const [filteredText, setFilteredText] = useState('')
   const [year, setYear] = useState('')
   const [contest, setContest] = useState('')
   const [level, setLevel] = useState('')
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [statusNote, setStatusNote] = useState('正在从 GitHub 拉取数据...')
-  const [branch, setBranch] = useState(FALLBACK_BRANCH)
+  const [statusNote, setStatusNote] = useState('正在初始化...')
+  const [branch, setBranch] = useState('')
   const [updatedAt, setUpdatedAt] = useState<string | undefined>(undefined)
   const [fromCache, setFromCache] = useState(false)
 
-  const CACHE_KEY = 'oi_navi_data_v1'
   const CACHE_DURATION = 1000 * 60 * 60 * 24 // 24 hours
 
-    const loadData = async (forceUpdate = false) => {
+  const loadData = async (source: DataSource, forceUpdate = false) => {
+    const conf = CONFIG[source]
+    const cacheKey = `oi_navi_data_v1_${source}`
+    const controller = new AbortController()
 
-      const controller = new AbortController()
-
-      // Try loading from cache first
-
-      if (!forceUpdate) {
-
-        try {
-
-          const cached = localStorage.getItem(CACHE_KEY)
-
-          if (cached) {
-
-            const { timestamp, data, branch: cachedBranch, updatedAt: cachedUpdatedAt } = JSON.parse(cached)
-
-            if (Date.now() - timestamp < CACHE_DURATION) {
-
-              setEntries(data)
-
-              setBranch(cachedBranch)
-
-              setUpdatedAt(cachedUpdatedAt)
-
-              setStatus('ready')
-
-              setStatusNote(`已加载本地缓存 (${new Date(timestamp).toLocaleString('zh-CN')})`)
-
-              setFromCache(true)
-
-              return
-
-            }
-
-          }
-
-        } catch (e) {
-
-          console.warn('Failed to load cache', e)
-
-        }
-
-      }
-
-  
-
-      setStatus('loading')
-
-      setStatusNote('正在连接 Gitee API...')
-
-      setFromCache(false)
-
-  
-
+    // Try loading from cache first
+    if (!forceUpdate) {
       try {
-
-        const repoInfo = await fetchDefaultBranch(controller.signal)
-
-        const branchName = repoInfo.default_branch ?? FALLBACK_BRANCH
-
-        setBranch(branchName)
-
-        setUpdatedAt(repoInfo.pushed_at)
-
-        setStatusNote('正在下载仓库文件列表...')
-
-  
-
-        const repoEntries = await fetchRepoEntries(branchName, controller.signal)
-
-        
-
-        setEntries(repoEntries)
-
-        setStatus('ready')
-
-        setStatusNote(`数据已更新 (共 ${repoEntries.length} 条)`)
-
-  
-
-        // Save to cache
-
-        try {
-
-          localStorage.setItem(CACHE_KEY, JSON.stringify({
-
-            timestamp: Date.now(),
-
-            data: repoEntries,
-
-            branch: branchName,
-
-            updatedAt: repoInfo.pushed_at
-
-          }))
-
-        } catch (e) {
-
-          console.warn('Failed to save cache', e)
-
-        }
-
-  
-
-      } catch (error) {
-
-        console.error(error)
-
-        
-
-        // If fetch fails but we have stale cache, use it as fallback
-
-        const cached = localStorage.getItem(CACHE_KEY)
-
+        const cached = localStorage.getItem(cacheKey)
         if (cached) {
-
-            const { data, branch: cachedBranch, updatedAt: cachedUpdatedAt, timestamp } = JSON.parse(cached)
-
+          const { timestamp, data, branch: cachedBranch, updatedAt: cachedUpdatedAt } = JSON.parse(cached)
+          if (Date.now() - timestamp < CACHE_DURATION) {
             setEntries(data)
-
             setBranch(cachedBranch)
-
             setUpdatedAt(cachedUpdatedAt)
-
             setStatus('ready')
-
-            setStatusNote(`网络请求失败，已展示旧缓存数据 (${new Date(timestamp).toLocaleString()})`)
-
+            setStatusNote(`已加载本地缓存 (${new Date(timestamp).toLocaleString('zh-CN')})`)
             setFromCache(true)
-
             return
-
+          }
         }
-
-  
-
-        setEntries(SAMPLE_ENTRIES)
-
-        setStatus('error')
-
-        setStatusNote('数据获取失败。请检查网络连接或稍后重试。')
-
+      } catch (e) {
+        console.warn('Failed to load cache', e)
       }
-
     }
 
-  
+    setStatus('loading')
+    setStatusNote(`正在连接 ${conf.label} API...`)
+    setFromCache(false)
 
-    useEffect(() => {
+    try {
+      const repoInfo = await fetchDefaultBranch(source, controller.signal)
+      const branchName = repoInfo.default_branch ?? conf.fallbackBranch
+      setBranch(branchName)
+      setUpdatedAt(repoInfo.pushed_at)
+      setStatusNote('正在下载仓库文件列表...')
 
-      loadData()
+      const repoEntries = await fetchRepoEntries(branchName, source, controller.signal)
+      
+      setEntries(repoEntries)
+      setStatus('ready')
+      setStatusNote(`数据已更新 (共 ${repoEntries.length} 条)`)
 
-    }, [])
-
-  
-
-    const handleForceRefresh = () => {
-
-      if (confirm('确认强制刷新？这将重新从 Gitee 获取最新数据。')) {
-
-        loadData(true)
-
+      // Save to cache
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          timestamp: Date.now(),
+          data: repoEntries,
+          branch: branchName,
+          updatedAt: repoInfo.pushed_at
+        }))
+      } catch (e) {
+        console.warn('Failed to save cache', e)
       }
 
+    } catch (error) {
+      console.error(error)
+      
+      // If fetch fails but we have stale cache, use it as fallback
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+          const { data, branch: cachedBranch, updatedAt: cachedUpdatedAt, timestamp } = JSON.parse(cached)
+          setEntries(data)
+          setBranch(cachedBranch)
+          setUpdatedAt(cachedUpdatedAt)
+          setStatus('ready')
+          setStatusNote(`网络请求失败，已展示旧缓存数据 (${new Date(timestamp).toLocaleString()})`)
+          setFromCache(true)
+          return
+      }
+
+      setEntries(SAMPLE_ENTRIES)
+      setStatus('error')
+      setStatusNote(`数据获取失败。${conf.desc}。请检查网络或切换数据源。`)
     }
-
-  
-
-    const searchText = filteredText.trim().toLowerCase()
-
-  
-
-    const filteredEntries = useMemo(() => {
-
-      return entries
-
-        .filter((entry) => (year ? entry.year === year : true))
-
-        .filter((entry) => (contest ? entry.contest === contest : true))
-
-        .filter((entry) => (level ? entry.level === level : true))
-
-        .filter((entry) => {
-
-          if (!searchText) return true
-
-          const combined = [
-
-            entry.name,
-
-            entry.path,
-
-            entry.contest,
-
-            entry.year,
-
-            entry.level,
-
-          ]
-
-            .filter(Boolean)
-
-            .join(' ')
-
-            .toLowerCase()
-
-          return combined.includes(searchText)
-
-        })
-
-        .sort((a, b) => {
-
-          const getYearAsNumber = (value?: string) => {
-
-            const parsed = value ? parseInt(value, 10) : Number.NaN
-
-            return Number.isFinite(parsed) ? parsed : -Infinity
-
-          }
-
-          const diff = getYearAsNumber(b.year) - getYearAsNumber(a.year)
-
-          if (diff !== 0) return diff
-
-          if (a.contest && b.contest && a.contest !== b.contest) {
-
-            return a.contest.localeCompare(b.contest)
-
-          }
-
-          return a.path.localeCompare(b.path)
-
-        })
-
-    }, [contest, entries, level, searchText, year])
-
-  
-
-    const yearOptions = useMemo(() => buildOptions(entries.map((item) => item.year), true), [entries])
-
-    const contestOptions = useMemo(
-
-      () => buildOptions(entries.map((item) => item.contest)),
-
-      [entries],
-
-    )
-
-    const levelOptions = useMemo(() => buildOptions(entries.map((item) => item.level)), [entries])
-
-  
-
-    const totalCount = entries.length
-
-    const filteredCount = filteredEntries.length
-
-  
-
-    return (
-
-      <div className="page">
-
-        <header className="hero">
-
-          <p className="eyebrow">OI 导航 · Gitee 数据源</p>
-
-          <h1>快速查找历年 OI 真题</h1>
-
-          <p className="lede">
-
-            数据来源于
-
-            <a href={`https://gitee.com/${OWNER}/${REPO}`} target="_blank" rel="noreferrer">
-
-              {OWNER}/{REPO}
-
-            </a>
-
-            ，支持按年份、比赛与级别过滤，点击即可跳转到对应文件或页面。
-
-          </p>
-
-          <div className="hero-actions">
-
-            <a
-
-              className="btn primary"
-
-              href={`https://gitee.com/${OWNER}/${REPO}`}
-
-              target="_blank"
-
-              rel="noreferrer"
-
-            >
-
-              查看 Gitee 仓库
-
-            </a>
-
-            <a
-
-              className="btn ghost"
-
-              href={`https://gitee.com/${OWNER}/${REPO}/tree/${branch}`}
-
-              target="_blank"
-
-              rel="noreferrer"
-
-            >
-
-              当前分支：{branch}
-
-            </a>
-
-          </div>
+  }
+
+  // Load data when dataSource changes
+  useEffect(() => {
+    loadData(dataSource)
+  }, [dataSource])
+
+  const handleForceRefresh = () => {
+    if (confirm(`确认强制刷新？这将重新从 ${CONFIG[dataSource].label} 获取最新数据。`)) {
+      loadData(dataSource, true)
+    }
+  }
+
+  const searchText = filteredText.trim().toLowerCase()
+
+  const filteredEntries = useMemo(() => {
+    return entries
+      .filter((entry) => (year ? entry.year === year : true))
+      .filter((entry) => (contest ? entry.contest === contest : true))
+      .filter((entry) => (level ? entry.level === level : true))
+      .filter((entry) => {
+        if (!searchText) return true
+        const combined = [
+          entry.name,
+          entry.path,
+          entry.contest,
+          entry.year,
+          entry.level,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return combined.includes(searchText)
+      })
+      .sort((a, b) => {
+        const getYearAsNumber = (value?: string) => {
+          const parsed = value ? parseInt(value, 10) : Number.NaN
+          return Number.isFinite(parsed) ? parsed : -Infinity
+        }
+        const diff = getYearAsNumber(b.year) - getYearAsNumber(a.year)
+        if (diff !== 0) return diff
+        if (a.contest && b.contest && a.contest !== b.contest) {
+          return a.contest.localeCompare(b.contest)
+        }
+        return a.path.localeCompare(b.path)
+      })
+  }, [contest, entries, level, searchText, year])
+
+  const yearOptions = useMemo(() => buildOptions(entries.map((item) => item.year), true), [entries])
+  const contestOptions = useMemo(
+    () => buildOptions(entries.map((item) => item.contest)),
+    [entries],
+  )
+  const levelOptions = useMemo(() => buildOptions(entries.map((item) => item.level)), [entries])
+
+  const totalCount = entries.length
+  const filteredCount = filteredEntries.length
+  const currentConf = CONFIG[dataSource]
+
+  return (
+    <div className="page">
+      <header className="hero">
+        <div className="hero-top">
+           <p className="eyebrow">OI 导航 · {currentConf.label} 数据源</p>
+           <div className="source-switch">
+             <label className={`switch-btn ${dataSource === 'gitee' ? 'active' : ''}`}>
+               <input 
+                 type="radio" 
+                 name="source" 
+                 value="gitee" 
+                 checked={dataSource === 'gitee'} 
+                 onChange={() => setDataSource('gitee')}
+               />
+               Gitee (推荐)
+             </label>
+             <label className={`switch-btn ${dataSource === 'github' ? 'active' : ''}`}>
+               <input 
+                 type="radio" 
+                 name="source" 
+                 value="github" 
+                 checked={dataSource === 'github'} 
+                 onChange={() => setDataSource('github')}
+               />
+               GitHub
+             </label>
+           </div>
+        </div>
+        
+        <h1>快速查找历年 OI 真题</h1>
+        <p className="lede">
+          数据来源于
+          <a href={`${currentConf.urlRoot}/${currentConf.owner}/${currentConf.repo}`} target="_blank" rel="noreferrer">
+            {currentConf.owner}/{currentConf.repo}
+          </a>
+          ，支持按年份、比赛与级别过滤。
+          <br/>
+          <span className="source-desc">
+            当前使用 <strong>{currentConf.label}</strong> 源：{currentConf.desc}。
+          </span>
+        </p>
+        <div className="hero-actions">
+          <a
+            className="btn primary"
+            href={`${currentConf.urlRoot}/${currentConf.owner}/${currentConf.repo}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            查看原始仓库
+          </a>
+          <a
+            className="btn ghost"
+            href={`${currentConf.urlRoot}/${currentConf.owner}/${currentConf.repo}/tree/${branch}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            当前分支：{branch || currentConf.fallbackBranch}
+          </a>
+        </div>
         <div className={`status ${status}`}>
           <span className="dot" />
           <span>{statusNote}</span>
@@ -573,7 +478,7 @@ function App() {
       <section className="list">
         <div className="list-header">
           <h2>真题列表</h2>
-          <p className="muted">支持点击标题或右侧按钮直接跳转到 Gitee 中的对应文件或目录。</p>
+          <p className="muted">支持点击标题或右侧按钮直接跳转到 {currentConf.label} 中的对应文件或目录。</p>
         </div>
         {filteredEntries.length === 0 ? (
           <div className="empty">暂无匹配结果，请调整筛选条件或关键词。</div>

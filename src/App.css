@@ -12,6 +12,66 @@
   box-shadow: 0 10px 30px rgba(0, 41, 122, 0.06);
 }
 
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.hero-top .eyebrow {
+  margin: 0;
+}
+
+.source-switch {
+  display: flex;
+  background: #fff;
+  border: 1px solid #d0d7ff;
+  border-radius: 8px;
+  padding: 2px;
+  overflow: hidden;
+}
+
+.switch-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  color: #64748b;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.switch-btn input {
+  display: none;
+}
+
+.switch-btn.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.switch-btn:hover:not(.active) {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.source-desc {
+  display: block;
+  font-size: 14px;
+  margin-top: 6px;
+  color: #64748b;
+}
+
+.source-desc strong {
+  color: #1d4ed8;
+}
+
 .eyebrow {
   font-size: 14px;
   color: #1d4ed8;
