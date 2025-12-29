@@ -98,8 +98,12 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
         : infoSegments[0]
   const contest =
     contestCandidate && contestCandidate !== fileName ? contestCandidate : undefined
-  const level =
+  let level =
     yearIndex >= 0 && infoSegments[yearIndex + 1] ? infoSegments[yearIndex + 1] : undefined
+
+  if (!level && yearIndex > 1) {
+    level = infoSegments[yearIndex - 1]
+  }
 
   const name = fileName.replace(/\.[^.]+$/, '') || fileName
 
