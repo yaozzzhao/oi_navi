@@ -26,9 +26,12 @@ function getExtension(path: string) {
   return path.split('.').pop()?.toLowerCase() ?? ''
 }
 
+/**
+ * 从路径片段中自右向左提取最靠后的年份信息（YYYY 格式）
+ */
 function findYearInfo(segments: string[]) {
   for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const matched = segments[index].match(/(19|20)\d{2}/)
+    const matched = segments[index].match(/(19|2[0-9])\d{2}/)
     if (matched) {
       return { year: matched[0], index }
     }
