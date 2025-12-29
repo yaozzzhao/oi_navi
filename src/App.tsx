@@ -68,6 +68,11 @@ function buildGithubUrl(path: string, branch: string) {
   return `https://github.com/${OWNER}/${REPO}/blob/${branch}/${encodedPath}`
 }
 
+function isPreviewable(path: string) {
+  const ext = path.split('.').pop()?.toLowerCase()
+  return ext ? ['pdf', 'txt', 'html', 'htm'].includes(ext) : false
+}
+
 function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
   const segments = path.split('/')
   const fileName = segments.at(-1)
@@ -351,7 +356,7 @@ function App() {
                     <p className="card-path">{entry.path}</p>
                   </div>
                   <a className="btn small" href={entry.url} target="_blank" rel="noreferrer">
-                    打开
+                    {isPreviewable(entry.path) ? '打开' : '下载'}
                   </a>
                 </div>
                 <div className="tags">
