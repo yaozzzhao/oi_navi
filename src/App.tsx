@@ -45,6 +45,18 @@ const SAMPLE_ENTRIES: ProblemEntry[] = [
   },
 ]
 
+function buildOptions(values: Array<string | undefined>, sortNumber = false) {
+  const unique = Array.from(new Set(values.filter(Boolean) as string[]))
+  if (sortNumber) {
+    const safeParse = (value: string) => {
+      const parsed = parseInt(value, 10)
+      return Number.isFinite(parsed) ? parsed : -Infinity
+    }
+    return unique.sort((a, b) => safeParse(b) - safeParse(a))
+  }
+  return unique.sort((a, b) => a.localeCompare(b))
+}
+
 function buildGithubUrl(path: string, branch: string) {
   const encodedPath = path
     .split('/')
@@ -92,7 +104,7 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
 async function fetchDefaultBranch(signal?: AbortSignal): Promise<RepoInfo> {
   const response = await fetch(`${API_ROOT}/repos/${OWNER}/${REPO}`, { signal })
   if (!response.ok) {
-    throw new Error('无法获取仓库信息')
+    throw new Error(`无法获取仓库信息: ${response.status} ${response.statusText}`)
   }
 
   return response.json()
@@ -211,8 +223,11 @@ function App() {
         return combined.includes(searchText)
       })
       .sort((a, b) => {
-        const yearValue = (value?: string) => parseInt(value ?? '0', 10) || 0
-        const diff = yearValue(b.year) - yearValue(a.year)
+        const getYearAsNumber = (value?: string) => {
+          const parsed = value ? parseInt(value, 10) : Number.NaN
+          return Number.isFinite(parsed) ? parsed : -Infinity
+        }
+        const diff = getYearAsNumber(b.year) - getYearAsNumber(a.year)
         if (diff !== 0) return diff
         if (a.contest && b.contest && a.contest !== b.contest) {
           return a.contest.localeCompare(b.contest)
@@ -220,14 +235,6 @@ function App() {
         return a.path.localeCompare(b.path)
       })
   }, [contest, entries, level, round, searchText, year])
-
-  const buildOptions = (values: Array<string | undefined>, sortNumber = false) => {
-    const unique = Array.from(new Set(values.filter(Boolean) as string[]))
-    if (sortNumber) {
-      return unique.sort((a, b) => parseInt(b, 10) - parseInt(a, 10))
-    }
-    return unique.sort((a, b) => a.localeCompare(b))
-  }
 
   const yearOptions = useMemo(() => buildOptions(entries.map((item) => item.year), true), [entries])
   const contestOptions = useMemo(
@@ -248,7 +255,7 @@ function App() {
         <p className="lede">
           数据来源于
           <a href={`https://github.com/${OWNER}/${REPO}`} target="_blank" rel="noreferrer">
-            winterant/{REPO}
+            {OWNER}/{REPO}
           </a>
           ，支持按年份、比赛、级别与轮次过滤，点击即可跳转到对应文件或页面。
         </p>
@@ -337,9 +344,7 @@ function App() {
       <section className="list">
         <div className="list-header">
           <h2>真题列表</h2>
-          <p className="muted">
-            支持点击标题或右侧按钮直接跳转到 winterant/{REPO} 中的对应文件或目录。
-          </p>
+          <p className="muted">支持点击标题或右侧按钮直接跳转到 {OWNER}/{REPO} 中的对应文件或目录。</p>
         </div>
         {filteredEntries.length === 0 ? (
           <div className="empty">暂无匹配结果，请调整筛选条件或关键词。</div>
