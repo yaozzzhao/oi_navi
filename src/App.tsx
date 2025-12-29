@@ -26,6 +26,19 @@ function getExtension(path: string) {
   return path.split('.').pop()?.toLowerCase() ?? ''
 }
 
+/**
+ * 从路径片段中自右向左提取最靠后的年份信息（YYYY 格式）
+ */
+function findYearInfo(segments: string[]) {
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const matched = segments[index].match(/(19|2[0-9])\d{2}/)
+    if (matched) {
+      return { year: matched[0], index }
+    }
+  }
+  return { year: undefined, index: -1 }
+}
+
 const SAMPLE_ENTRIES: ProblemEntry[] = [
   {
     id: 'sample-readme',
@@ -81,8 +94,7 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
   if (!fileName) return null
 
   const infoSegments = segments.slice(0, -1)
-  const yearIndex = infoSegments.findIndex((segment) => /^\d{4}$/.test(segment))
-  const year = yearIndex >= 0 ? infoSegments[yearIndex] : undefined
+  const { year, index: yearIndex } = findYearInfo(infoSegments)
   const contestCandidate =
     yearIndex > 0
       ? infoSegments[0]
