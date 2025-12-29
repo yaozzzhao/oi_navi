@@ -9,7 +9,6 @@ type ProblemEntry = {
   contest?: string
   year?: string
   level?: string
-  round?: string
   segments: string[]
 }
 
@@ -94,8 +93,6 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
     contestCandidate && contestCandidate !== fileName ? contestCandidate : undefined
   const level =
     yearIndex >= 0 && infoSegments[yearIndex + 1] ? infoSegments[yearIndex + 1] : undefined
-  const round =
-    yearIndex >= 0 && infoSegments[yearIndex + 2] ? infoSegments[yearIndex + 2] : undefined
 
   const name = fileName.replace(/\.[^.]+$/, '') || fileName
 
@@ -107,7 +104,6 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
     contest,
     year,
     level,
-    round,
     segments: infoSegments,
   }
 }
