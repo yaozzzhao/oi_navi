@@ -82,7 +82,14 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
 
   const infoSegments = segments.slice(0, -1)
   const yearIndex = infoSegments.findIndex((segment) => /^\d{4}$/.test(segment))
-  const year = yearIndex >= 0 ? infoSegments[yearIndex] : undefined
+  let year = yearIndex >= 0 ? infoSegments[yearIndex] : undefined
+  if (!year) {
+    const nameWithoutExt = fileName.replace(/\.[^.]+$/, '')
+    if (/^\d{4}$/.test(nameWithoutExt)) {
+      year = nameWithoutExt
+    }
+  }
+
   const contestCandidate =
     yearIndex > 0
       ? infoSegments[0]
