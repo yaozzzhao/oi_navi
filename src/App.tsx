@@ -9,7 +9,6 @@ type ProblemEntry = {
   contest?: string
   year?: string
   level?: string
-  round?: string
   segments: string[]
 }
 
@@ -22,6 +21,10 @@ const OWNER = 'winterant'
 const REPO = 'oi'
 const API_ROOT = 'https://api.github.com'
 const FALLBACK_BRANCH = 'main'
+
+function getExtension(path: string) {
+  return path.split('.').pop()?.toLowerCase() ?? ''
+}
 
 const SAMPLE_ENTRIES: ProblemEntry[] = [
   {
@@ -40,7 +43,6 @@ const SAMPLE_ENTRIES: ProblemEntry[] = [
     contest: 'NOI',
     year: '2024',
     level: '总览',
-    round: '样例',
     segments: ['NOI', '2024'],
   },
 ]
@@ -62,7 +64,15 @@ function buildGithubUrl(path: string, branch: string) {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
+  if (getExtension(path) === 'pdf') {
+    return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${encodedPath}`
+  }
   return `https://github.com/${OWNER}/${REPO}/blob/${branch}/${encodedPath}`
+}
+
+function isPreviewable(path: string) {
+  const ext = getExtension(path)
+  return ext ? ['pdf', 'txt', 'html', 'htm'].includes(ext) : false
 }
 
 function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
@@ -83,8 +93,6 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
     contestCandidate && contestCandidate !== fileName ? contestCandidate : undefined
   const level =
     yearIndex >= 0 && infoSegments[yearIndex + 1] ? infoSegments[yearIndex + 1] : undefined
-  const round =
-    yearIndex >= 0 && infoSegments[yearIndex + 2] ? infoSegments[yearIndex + 2] : undefined
 
   const name = fileName.replace(/\.[^.]+$/, '') || fileName
 
@@ -96,7 +104,6 @@ function mapPathToEntry(path: string, branch: string): ProblemEntry | null {
     contest,
     year,
     level,
-    round,
     segments: infoSegments,
   }
 }
@@ -159,7 +166,6 @@ function App() {
   const [year, setYear] = useState('')
   const [contest, setContest] = useState('')
   const [level, setLevel] = useState('')
-  const [round, setRound] = useState('')
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statusNote, setStatusNote] = useState('正在从 GitHub 拉取数据...')
   const [branch, setBranch] = useState(FALLBACK_BRANCH)
@@ -206,7 +212,6 @@ function App() {
       .filter((entry) => (year ? entry.year === year : true))
       .filter((entry) => (contest ? entry.contest === contest : true))
       .filter((entry) => (level ? entry.level === level : true))
-      .filter((entry) => (round ? entry.round === round : true))
       .filter((entry) => {
         if (!searchText) return true
         const combined = [
@@ -215,7 +220,6 @@ function App() {
           entry.contest,
           entry.year,
           entry.level,
-          entry.round,
         ]
           .filter(Boolean)
           .join(' ')
@@ -234,7 +238,7 @@ function App() {
         }
         return a.path.localeCompare(b.path)
       })
-  }, [contest, entries, level, round, searchText, year])
+  }, [contest, entries, level, searchText, year])
 
   const yearOptions = useMemo(() => buildOptions(entries.map((item) => item.year), true), [entries])
   const contestOptions = useMemo(
@@ -242,7 +246,6 @@ function App() {
     [entries],
   )
   const levelOptions = useMemo(() => buildOptions(entries.map((item) => item.level)), [entries])
-  const roundOptions = useMemo(() => buildOptions(entries.map((item) => item.round)), [entries])
 
   const totalCount = entries.length
   const filteredCount = filteredEntries.length
@@ -257,7 +260,7 @@ function App() {
           <a href={`https://github.com/${OWNER}/${REPO}`} target="_blank" rel="noreferrer">
             {OWNER}/{REPO}
           </a>
-          ，支持按年份、比赛、级别与轮次过滤，点击即可跳转到对应文件或页面。
+          ，支持按年份、比赛与级别过滤，点击即可跳转到对应文件或页面。
         </p>
         <div className="hero-actions">
           <a
@@ -322,13 +325,6 @@ function App() {
             options={levelOptions}
             placeholder="全部级别"
           />
-          <Selector
-            label="轮次/Day"
-            value={round}
-            onChange={setRound}
-            options={roundOptions}
-            placeholder="全部轮次"
-          />
           <label className="field search">
             <span className="field-label">关键词</span>
             <input
@@ -358,14 +354,13 @@ function App() {
                     <p className="card-path">{entry.path}</p>
                   </div>
                   <a className="btn small" href={entry.url} target="_blank" rel="noreferrer">
-                    打开
+                    {isPreviewable(entry.path) ? '打开' : '下载'}
                   </a>
                 </div>
                 <div className="tags">
                   {entry.contest && <span className="pill">{entry.contest}</span>}
                   {entry.year && <span className="pill pill-muted">{entry.year}</span>}
                   {entry.level && <span className="pill">{entry.level}</span>}
-                  {entry.round && <span className="pill pill-muted">{entry.round}</span>}
                 </div>
               </article>
             ))}
