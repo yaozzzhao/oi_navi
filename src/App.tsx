@@ -225,7 +225,6 @@ function App() {
           entry.contest,
           entry.year,
           entry.level,
-          entry.round,
         ]
           .filter(Boolean)
           .join(' ')
@@ -367,7 +366,6 @@ function App() {
                   {entry.contest && <span className="pill">{entry.contest}</span>}
                   {entry.year && <span className="pill pill-muted">{entry.year}</span>}
                   {entry.level && <span className="pill">{entry.level}</span>}
-                  {entry.round && <span className="pill pill-muted">{entry.round}</span>}
                 </div>
               </article>
             ))}
