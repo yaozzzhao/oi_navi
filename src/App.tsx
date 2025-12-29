@@ -62,6 +62,9 @@ function buildGithubUrl(path: string, branch: string) {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
+  if (path.toLowerCase().endsWith('.pdf')) {
+    return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${encodedPath}`
+  }
   return `https://github.com/${OWNER}/${REPO}/blob/${branch}/${encodedPath}`
 }
 
@@ -159,7 +162,6 @@ function App() {
   const [year, setYear] = useState('')
   const [contest, setContest] = useState('')
   const [level, setLevel] = useState('')
-  const [round, setRound] = useState('')
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statusNote, setStatusNote] = useState('正在从 GitHub 拉取数据...')
   const [branch, setBranch] = useState(FALLBACK_BRANCH)
@@ -206,7 +208,6 @@ function App() {
       .filter((entry) => (year ? entry.year === year : true))
       .filter((entry) => (contest ? entry.contest === contest : true))
       .filter((entry) => (level ? entry.level === level : true))
-      .filter((entry) => (round ? entry.round === round : true))
       .filter((entry) => {
         if (!searchText) return true
         const combined = [
@@ -234,7 +235,7 @@ function App() {
         }
         return a.path.localeCompare(b.path)
       })
-  }, [contest, entries, level, round, searchText, year])
+  }, [contest, entries, level, searchText, year])
 
   const yearOptions = useMemo(() => buildOptions(entries.map((item) => item.year), true), [entries])
   const contestOptions = useMemo(
@@ -242,7 +243,6 @@ function App() {
     [entries],
   )
   const levelOptions = useMemo(() => buildOptions(entries.map((item) => item.level)), [entries])
-  const roundOptions = useMemo(() => buildOptions(entries.map((item) => item.round)), [entries])
 
   const totalCount = entries.length
   const filteredCount = filteredEntries.length
@@ -257,7 +257,7 @@ function App() {
           <a href={`https://github.com/${OWNER}/${REPO}`} target="_blank" rel="noreferrer">
             {OWNER}/{REPO}
           </a>
-          ，支持按年份、比赛、级别与轮次过滤，点击即可跳转到对应文件或页面。
+          ，支持按年份、比赛与级别过滤，点击即可跳转到对应文件或页面。
         </p>
         <div className="hero-actions">
           <a
@@ -321,13 +321,6 @@ function App() {
             onChange={setLevel}
             options={levelOptions}
             placeholder="全部级别"
-          />
-          <Selector
-            label="轮次/Day"
-            value={round}
-            onChange={setRound}
-            options={roundOptions}
-            placeholder="全部轮次"
           />
           <label className="field search">
             <span className="field-label">关键词</span>
