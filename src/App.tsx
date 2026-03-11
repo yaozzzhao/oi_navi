@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { PdfViewer } from './components/PdfViewer'
 import './App.css'
 
 type ProblemEntry = {
@@ -7,7 +6,6 @@ type ProblemEntry = {
   name: string
   path: string
   url: string
-  pdfViewerUrl?: string
   contest?: string
   year?: string
   level?: string
@@ -69,7 +67,7 @@ function buildOptions(values: Array<string | undefined>, sortNumber = false) {
   return unique.sort((a, b) => a.localeCompare(b))
 }
 
-function buildRepoUrl(path: string, branch: string, source: DataSource, forPdfViewer: boolean = false) {
+function buildRepoUrl(path: string, branch: string, source: DataSource) {
   const conf = CONFIG[source]
   const encodedPath = path
     .split('/')
@@ -79,21 +77,12 @@ function buildRepoUrl(path: string, branch: string, source: DataSource, forPdfVi
   if (source === 'gitee') {
     // Gitee raw: https://gitee.com/winant/oi/raw/master/path/to/file.pdf
     if (getExtension(path) === 'pdf') {
-      if (forPdfViewer) {
-        // Gitee blocks CORS on raw files, preventing react-pdf from rendering.
-        // As a workaround, we use a jsdelivr mirror to fetch from GitHub for stable domestic access with CORS support.
-        // We use the same branch since they are mirrored repositories.
-        return `https://cdn.jsdmirror.com/gh/${CONFIG.github.owner}/${CONFIG.github.repo}@${branch}/${encodedPath}`
-      }
       return `${conf.urlRoot}/${conf.owner}/${conf.repo}/raw/${branch}/${encodedPath}`
     }
     return `${conf.urlRoot}/${conf.owner}/${conf.repo}/blob/${branch}/${encodedPath}`
   } else {
     // GitHub
     if (getExtension(path) === 'pdf') {
-      if (forPdfViewer) {
-        return `https://cdn.jsdmirror.com/gh/${conf.owner}/${conf.repo}@${branch}/${encodedPath}`
-      }
       return `https://raw.githubusercontent.com/${conf.owner}/${conf.repo}/${branch}/${encodedPath}`
     }
     return `${conf.urlRoot}/${conf.owner}/${conf.repo}/blob/${branch}/${encodedPath}`
@@ -142,7 +131,6 @@ function mapPathToEntry(path: string, branch: string, source: DataSource): Probl
     name,
     path,
     url: buildRepoUrl(path, branch, source),
-    pdfViewerUrl: buildRepoUrl(path, branch, source, true),
     contest,
     year,
     level,
@@ -216,7 +204,6 @@ function App() {
   const [branch, setBranch] = useState('')
   const [updatedAt, setUpdatedAt] = useState<string | undefined>(undefined)
   const [fromCache, setFromCache] = useState(false)
-  const [selectedPdfUrl, setSelectedPdfUrl] = useState<string | null>(null)
 
   const CACHE_DURATION = 1000 * 60 * 60 * 24 // 24 hours
 
@@ -300,7 +287,6 @@ function App() {
   // Load data when dataSource changes
   useEffect(() => {
     loadData(dataSource)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataSource])
 
   const handleForceRefresh = () => {
@@ -498,47 +484,27 @@ function App() {
           <div className="empty">暂无匹配结果，请调整筛选条件或关键词。</div>
         ) : (
           <div className="cards">
-            {filteredEntries.map((entry) => {
-              const isPdf = getExtension(entry.path) === 'pdf';
-              
-              return (
-                <article className="card" key={entry.id}>
-                  <div className="card-head">
-                    <div>
-                      <p className="card-title">{entry.name}</p>
-                      <p className="card-path">{entry.path}</p>
-                    </div>
-                    {isPdf ? (
-                      <button 
-                        className="btn small"
-                        onClick={() => setSelectedPdfUrl(entry.pdfViewerUrl || entry.url)}
-                      >
-                        预览
-                      </button>
-                    ) : (
-                      <a className="btn small" href={entry.url} target="_blank" rel="noreferrer">
-                        {isPreviewable(entry.path) ? '打开' : '下载'}
-                      </a>
-                    )}
+            {filteredEntries.map((entry) => (
+              <article className="card" key={entry.id}>
+                <div className="card-head">
+                  <div>
+                    <p className="card-title">{entry.name}</p>
+                    <p className="card-path">{entry.path}</p>
                   </div>
-                  <div className="tags">
-                    {entry.contest && <span className="pill">{entry.contest}</span>}
-                    {entry.year && <span className="pill pill-muted">{entry.year}</span>}
-                    {entry.level && <span className="pill">{entry.level}</span>}
-                  </div>
-                </article>
-              );
-            })}
+                  <a className="btn small" href={entry.url} target="_blank" rel="noreferrer">
+                    {isPreviewable(entry.path) ? '打开' : '下载'}
+                  </a>
+                </div>
+                <div className="tags">
+                  {entry.contest && <span className="pill">{entry.contest}</span>}
+                  {entry.year && <span className="pill pill-muted">{entry.year}</span>}
+                  {entry.level && <span className="pill">{entry.level}</span>}
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>
-      
-      {selectedPdfUrl && (
-        <PdfViewer 
-          url={selectedPdfUrl} 
-          onClose={() => setSelectedPdfUrl(null)} 
-        />
-      )}
     </div>
   )
 }
